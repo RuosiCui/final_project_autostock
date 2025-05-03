@@ -53,8 +53,10 @@ class LLMCoordinatorAgent:
         system_prompt = (
             "You are a financial analyst assistant. Based on technical indicators and model prediction, "
             "you are given this instruction below to identify overbought: if 2day-RSI is greater than 90, oversold if 2day-RSI is less than 10"
-            "summarize the market situation and suggest an action."
-
+            "summarize the market situation and must suggest a final action."
+            "**Important:** At the end of your summary, clearly include this line:\n"
+            "Final Probability (UP): <value between 0 and 1>\n"
+            "Use that probability to decide BUY (if > 0.5) or SELL (if <= 0.5)."
         )
 
         user_prompt = (
