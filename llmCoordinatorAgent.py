@@ -4,6 +4,7 @@ from analysis_agent import AnalysisAgent
 from ml_agent import MLAgent
 from data_fetch_agent import DataFetchAgent
 from fear_greed_agent import get_fear_greed_score
+from visualization_agent import VisualizationAgent
 
 import pandas as pd
 import numpy as np
@@ -64,6 +65,8 @@ class LLMCoordinatorAgent:
             f"- SMA: {analysis_results['sma']:.2f}\n"
             f"- Support: {analysis_results['support']:.2f}\n"
             f"- Resistance: {analysis_results['resistance']:.2f}\n"
+            f"- MA Crossover Signal: {analysis_results.get('ma_crossover')}\n"
+            f"- Price vs MA200: {analysis_results.get('price_vs_ma200')}\n"
             f"- Fear & Greed Index: {fg_score} (0 = extreme fear, 100 = extreme greed)\n"
             f"- ML Model Validation Accuracy: {ml_accuracy:.2f}\n"
             f"\nThe machine learning model predicts: "
@@ -150,5 +153,6 @@ if __name__ == "__main__":
 
     # Step 7: Run coordinator
     output = coordinator.handle_request(user_input, analysis_results, enriched_df,ml_accuracy)
-    print("ML  Decision:", output["decision"])
     print("Generated Summary:\n", output["summary"])
+    viz_agent = VisualizationAgent()
+    viz_agent.plot(enriched_df, ticker)

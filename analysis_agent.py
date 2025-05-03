@@ -42,7 +42,41 @@ class AnalysisAgent:
             'resistance': latest['resistance']
         }
 
+        results.update(self.detect_ma_signals(df))
+
         return results, df
+    
+    def detect_ma_signals(self,df: pd.DataFrame) -> dict:
+        result = {}
+
+        # Ensure MAs exist
+        if "sma20" not in df.columns:
+            df["sma20"] = df["close"].rolling(20).mean()
+        if "sma50" not in df.columns:
+            df["sma50"] = df["close"].rolling(50).mean()
+        if "sma200" not in df.columns:
+            df["sma200"] = df["close"].rolling(200).mean()
+
+        # Most recent row
+        today = df.iloc[-1]
+        yesterday = df.iloc[-2]
+
+        # Crossover detection
+        if yesterday["sma20"] < yesterday["sma50"] and today["sma20"] > today["sma50"]:
+            result["ma_crossover"] = "Bullish: 20-day MA crossed above 50-day"
+        elif yesterday["sma20"] > yesterday["sma50"] and today["sma20"] < today["sma50"]:
+            result["ma_crossover"] = "Bearish: 20-day MA crossed below 50-day"
+        else:
+            result["ma_crossover"] = "No recent crossover between 20d and 50d"
+
+        # Price vs long-term MA
+        if today["close"] > today["sma200"]:
+            result["price_vs_ma200"] = "Price is above 200-day MA (bullish)"
+        else:
+            result["price_vs_ma200"] = "Price is below 200-day MA (bearish)"
+
+        return result
+
 
 
 # Example usage:
