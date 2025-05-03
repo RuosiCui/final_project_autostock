@@ -2,8 +2,11 @@ import os
 from openai import OpenAI
 from analysis_agent import AnalysisAgent
 from ml_agent import MLAgent
+from data_fetch_agent import DataFetchAgent
 import pandas as pd
 import numpy as np
+import re
+import argparse
 
 class LLMCoordinatorAgent:
     def __init__(self, analysis_agent, ml_agent):
@@ -15,6 +18,33 @@ class LLMCoordinatorAgent:
         self.analysis_agent = analysis_agent
         self.ml_agent = ml_agent
         self.client = OpenAI(api_key=api_key)
+    def extract_ticker_with_llm(self, user_input: str) -> str:
+        system_prompt = (
+            "You are a finance assistant. Extract the stock ticker symbol (e.g., AAPL, TSLA, PLTR) "
+            "from the user's request. Only reply with the uppercase ticker symbol. "
+            "If no ticker is found, reply with 'NONE'."
+        )
+
+        response = self.client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input}
+            ],
+            temperature=0,
+            max_tokens=10,
+        )
+
+        extracted = response.choices[0].message.content.strip().upper()
+        if re.fullmatch(r"[A-Z]{1,5}", extracted):
+            return extracted
+        else:
+            return self.extract_ticker_regex(user_input)
+
+    def extract_ticker_regex(self, user_input: str) -> str:
+        # Fallback if GPT fails
+        candidates = re.findall(r'\b[A-Z]{1,5}\b', user_input.upper())
+        return candidates[0] if candidates else None
 
     def generate_summary_with_llm(self, analysis_results: dict, ml_prediction: int, user_input: str) -> str:
         system_prompt = (
@@ -47,9 +77,8 @@ class LLMCoordinatorAgent:
 
         return response.choices[0].message.content
 
-    def handle_request(self, user_input: str, historical_df: pd.DataFrame) -> dict:
-        analysis_results = self.analysis_agent.analyze(historical_df)
-        today_row = historical_df.iloc[-1]
+    def handle_request(self, user_input: str, analysis_results: dict, enriched_df: pd.DataFrame) -> dict:
+        today_row = enriched_df.iloc[-1]
         ml_prediction = self.ml_agent.predict(today_row)
 
         summary = self.generate_summary_with_llm(analysis_results, ml_prediction, user_input)
@@ -67,30 +96,39 @@ class LLMCoordinatorAgent:
 # Example Usage
 # ------------------------------------------------------------
 if __name__ == "__main__":
-    # Simulate historical data
-    dates = pd.date_range(start="2024-01-01", end="2024-02-10")
-    np.random.seed(42)
-    prices = np.cumsum(np.random.normal(0, 1, size=len(dates))) + 100
+    parser = argparse.ArgumentParser(description="Run stock analysis via LLM agent")
+    parser.add_argument("user_input", type=str, help="Prompt for the agent (e.g., 'Tell me about AAPL')")
+    parser.add_argument("--start", type=str, default=None, help="Start date (YYYY-MM-DD)")
+    parser.add_argument("--end", type=str, default=None, help="End date (YYYY-MM-DD)")
+    args = parser.parse_args()
 
-    df = pd.DataFrame({
-        "date": dates,
-        "close": prices,
-        "high": prices + np.random.uniform(0.5, 1.5, size=len(dates)),
-        "low": prices - np.random.uniform(0.5, 1.5, size=len(dates)),
-        "volume": np.random.randint(1000, 5000, size=len(dates))
-    })
+    user_input = args.user_input
+    start_date = args.start
+    end_date = args.end
 
-    df['rsi'] = np.random.uniform(30, 70, size=len(df))
-    df['macd'] = np.random.normal(0, 1, size=len(df))
-    df['macd_signal'] = np.random.normal(0, 1, size=len(df))
-    df['sma'] = df['close'].rolling(window=5).mean()
-
+    # Step 1: Create agents
     analysis_agent = AnalysisAgent()
     ml_agent = MLAgent()
-    ml_agent.train(df)
-
     coordinator = LLMCoordinatorAgent(analysis_agent, ml_agent)
-    output = coordinator.handle_request("Tell me about TQQQ", df)
+
+    # Step 2: Extract ticker from prompt
+    ticker = coordinator.extract_ticker_with_llm(user_input)
+    if ticker == "NONE":
+        print("Could not extract a valid ticker.")
+        exit(1)
+
+    # Step 3: Fetch data
+    data_fetch_agent = DataFetchAgent(start=start_date, end=end_date)
+    df = data_fetch_agent.fetch(ticker)
+
+    # Step 4: Analyze and enrich
+    analysis_results, enriched_df = analysis_agent.analyze(df)
+
+    # Step 5: Train ML model
+    ml_agent.train(enriched_df)
+
+    # Step 6: Run coordinator
+    output = coordinator.handle_request(user_input, analysis_results, enriched_df)
 
     print("Final Decision:", output["decision"])
     print("Generated Summary:\n", output["summary"])
