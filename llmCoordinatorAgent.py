@@ -3,6 +3,8 @@ from openai import OpenAI
 from analysis_agent import AnalysisAgent
 from ml_agent import MLAgent
 from data_fetch_agent import DataFetchAgent
+from fear_greed_agent import get_fear_greed_score
+
 import pandas as pd
 import numpy as np
 import re
@@ -46,20 +48,24 @@ class LLMCoordinatorAgent:
         candidates = re.findall(r'\b[A-Z]{1,5}\b', user_input.upper())
         return candidates[0] if candidates else None
 
-    def generate_summary_with_llm(self, analysis_results: dict, ml_prediction: int, user_input: str) -> str:
+    def generate_summary_with_llm(self, analysis_results: dict, ml_prediction: int, user_input: str,fg_score: float,ml_accuracy: float) -> str:
         system_prompt = (
             "You are a financial analyst assistant. Based on technical indicators and model prediction, "
+            "you are given this instruction below to identify overbought: if 2day-RSI is greater than 90, oversold if 2day-RSI is less than 10"
             "summarize the market situation and suggest an action."
+
         )
 
         user_prompt = (
             f"User asked: {user_input}\n\n"
             f"Here is today's technical analysis:\n"
-            f"- RSI: {analysis_results['rsi']:.2f}\n"
+            f"- 2day-RSI: {analysis_results['rsi']:.2f}\n"
             f"- MACD: {analysis_results['macd']:.2f}\n"
             f"- SMA: {analysis_results['sma']:.2f}\n"
             f"- Support: {analysis_results['support']:.2f}\n"
             f"- Resistance: {analysis_results['resistance']:.2f}\n"
+            f"- Fear & Greed Index: {fg_score} (0 = extreme fear, 100 = extreme greed)\n"
+            f"- ML Model Validation Accuracy: {ml_accuracy:.2f}\n"
             f"\nThe machine learning model predicts: "
             f"{'UP (suggesting BUY)' if ml_prediction == 1 else 'DOWN (suggesting SELL)'}\n"
             f"\nPlease write a natural language summary and suggest a final action."
@@ -77,11 +83,15 @@ class LLMCoordinatorAgent:
 
         return response.choices[0].message.content
 
-    def handle_request(self, user_input: str, analysis_results: dict, enriched_df: pd.DataFrame) -> dict:
+    def handle_request(self, user_input: str, analysis_results: dict, enriched_df: pd.DataFrame,ml_accuracy:float) -> dict:
         today_row = enriched_df.iloc[-1]
         ml_prediction = self.ml_agent.predict(today_row)
 
-        summary = self.generate_summary_with_llm(analysis_results, ml_prediction, user_input)
+        fg_value = today_row.get("fear_greed", None)
+        if fg_value is not None:
+            analysis_results["fear_greed"] = round(fg_value, 2)
+
+        summary = self.generate_summary_with_llm(analysis_results, ml_prediction, user_input,fg_value,ml_accuracy)
 
         decision = "BUY" if ml_prediction == 1 else "SELL"
 
@@ -124,11 +134,21 @@ if __name__ == "__main__":
     # Step 4: Analyze and enrich
     analysis_results, enriched_df = analysis_agent.analyze(df)
 
-    # Step 5: Train ML model
-    ml_agent.train(enriched_df)
+    # Step 5: Merge Fear & Greed Index into enriched_df
+    fg_df = get_fear_greed_score(
+        start_date or enriched_df["date"].min().strftime("%Y-%m-%d"),
+        end_date or enriched_df["date"].max().strftime("%Y-%m-%d")
+    )
+    print(fg_df.tail)
+    enriched_df = pd.merge(enriched_df, fg_df, on="date", how="left")
+    enriched_df.rename(columns={"FG": "fear_greed"}, inplace=True)
 
-    # Step 6: Run coordinator
-    output = coordinator.handle_request(user_input, analysis_results, enriched_df)
+    print("Latest enriched_df date:", enriched_df["date"].max())
 
-    print("Final Decision:", output["decision"])
+    # Step 6: Train ML model
+    ml_accuracy = ml_agent.train(enriched_df)
+
+    # Step 7: Run coordinator
+    output = coordinator.handle_request(user_input, analysis_results, enriched_df,ml_accuracy)
+    print("ML  Decision:", output["decision"])
     print("Generated Summary:\n", output["summary"])

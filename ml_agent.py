@@ -39,6 +39,7 @@ class MLAgent:
         # Validation accuracy (optional for printing)
         accuracy = self.model.score(X_val_scaled, y_val)
         print(f"Validation Accuracy: {accuracy:.2f}")
+        return accuracy 
 
     def predict(self, today_row: pd.Series) -> int:
         """
