@@ -15,14 +15,14 @@ class MLAgent:
         Train the ML model to predict next-day price movement (up/down).
 
         Parameters:
-        - historical_df: pd.DataFrame with ['close', 'volume', 'rsi', 'macd', 'macd_signal', 'sma']
+        - historical_df: pd.DataFrame with ['close', 'volume', 'rsi2', 'macd', 'macd_signal', 'sma']
         """
         historical_df = historical_df.dropna()
 
         # Create target: next day up (1) or down (0)
         historical_df['target'] = (historical_df['close'].shift(-1) > historical_df['close']).astype(int)
 
-        features = ['close', 'volume', 'rsi', 'macd', 'macd_signal', 'sma']
+        features = ['close', 'volume', 'rsi2', 'macd', 'macd_signal', 'sma']
         X = historical_df[features]
         y = historical_df['target']
 
@@ -54,7 +54,7 @@ class MLAgent:
         if not self.is_trained:
             raise ValueError("Model not trained yet!")
 
-        features = ['close', 'volume', 'rsi', 'macd', 'macd_signal', 'sma']
+        features = ['close', 'volume', 'rsi2', 'macd', 'macd_signal', 'sma']
         X_today = today_row[features].values.reshape(1, -1)
         X_today_scaled = self.scaler.transform(X_today)
         pred = self.model.predict(X_today_scaled)[0]

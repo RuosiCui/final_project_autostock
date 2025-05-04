@@ -2,7 +2,7 @@ import pandas as pd
 import ta
 
 class AnalysisAgent:
-    def __init__(self, rsi_length=2, sma_window=50):
+    def __init__(self, rsi_length=2, sma_window=200):
         self.rsi_length = rsi_length
         self.sma_window = sma_window
 
@@ -21,25 +21,50 @@ class AnalysisAgent:
         df = historical_df.sort_values('date').copy()
 
         # Compute indicators
-        df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=self.rsi_length).rsi()
+        df['rsi2'] = ta.momentum.RSIIndicator(close=df['close'], window=self.rsi_length).rsi()
         macd_obj = ta.trend.MACD(close=df['close'])
         df['macd'] = macd_obj.macd()
         df['macd_signal'] = macd_obj.macd_signal()
         df['sma'] = ta.trend.SMAIndicator(close=df['close'], window=self.sma_window).sma_indicator()
         df['support'] = df['low'].rolling(window=20).min()
         df['resistance'] = df['high'].rolling(window=20).max()
+        df = df.copy()
+        # Momentum
+        df["rsi14"] = ta.momentum.rsi(df["close"], window=14)
+        df["stoch_k"] = ta.momentum.stoch(df["high"], df["low"], df["close"])
+        # Volatility
+        df["atr"] = ta.volatility.average_true_range(df["high"], df["low"], df["close"])
+        # Trend
+        df["ema12"] = ta.trend.ema_indicator(df["close"], 12)
+        df["ema26"] = ta.trend.ema_indicator(df["close"], 26)
+        df["dist_sma200"] = (df["close"] - ta.trend.sma_indicator(df["close"], 200)) / \
+                            ta.trend.sma_indicator(df["close"], 200)
+        # Volume ratio
+        df["vol_ratio"] = df["volume"] / df["volume"].rolling(20).mean()
+        # Calendar
+        df["dow"] = df["date"].dt.dayofweek           # 0‑Mon … 4‑Fri
+        df["month"] = df["date"].dt.month
+        df["bb_upper"]  = ta.volatility.bollinger_hband(df["close"])
+        df["bb_lower"]  = ta.volatility.bollinger_lband(df["close"])
 
         # Drop rows with NaN due to rolling/EMA
         df.dropna(inplace=True)
 
         latest = df.iloc[-1]
         results = {
-            'rsi': latest['rsi'],
+            'rsi2': latest['rsi2'],
+            'rsi14': latest['rsi14'],
             'macd': latest['macd'],
             'macd_signal': latest['macd_signal'],
             'sma': latest['sma'],
             'support': latest['support'],
-            'resistance': latest['resistance']
+            'resistance': latest['resistance'],
+            "stoch_k": latest["stoch_k"],
+            'atr': latest['atr'],
+            'vol_ratio': latest['vol_ratio'],
+            'bb_uper': latest['bb_upper'],
+            'bb_lower': latest['bb_lower'],
+            'today_vol/20d_avg': latest['vol_ratio']
         }
 
         results.update(self.detect_ma_signals(df))

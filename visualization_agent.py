@@ -39,8 +39,8 @@ class VisualizationAgent:
         ax_price2.legend(loc='upper right')
 
         # 2️⃣ RSI
-        if 'rsi' in df.columns:
-            ax_rsi.plot(df.index, df['rsi'], color='purple', label='RSI (14)', linewidth=1.5)
+        if 'rsi14' in df.columns:
+            ax_rsi.plot(df.index, df['rsi14'], color='purple', label='RSI (14)', linewidth=1.5)
             ax_rsi.axhline(70, color='red', linestyle='--', linewidth=1)
             ax_rsi.axhline(30, color='green', linestyle='--', linewidth=1)
             ax_rsi.set_ylim(0, 100)
