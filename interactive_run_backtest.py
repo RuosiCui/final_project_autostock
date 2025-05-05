@@ -1,7 +1,6 @@
 from analysis_agent import AnalysisAgent
 from ml_agent import MLAgent
 from data_fetch_agent import DataFetchAgent
-from interactive_tool_calling_agent import InteractiveToolCallingAgent
 from fear_greed_agent import get_fear_greed_score
 from feature_resolver import extract_features
 import pandas as pd
@@ -9,6 +8,67 @@ import numpy as np
 import os
 import re
 from datetime import datetime, timedelta
+import json
+
+def generate_market_summary(client, analysis_results, ml_accuracy, ticker, fg_score):
+    """Generate a market summary using OpenAI API directly"""
+    system_prompt = (
+        "You are a financial analyst assistant. Analyze the market situation based on all available data including technical indicators, "
+        "market sentiment, and machine learning predictions. When the ML model accuracy is low (below 0.6), give it less weight in your analysis.\n\n"
+        "Use these guidelines for your analysis:\n"
+        "- Consider a stock overbought if 2day-RSI is greater than 90\n"
+        "- Consider a stock oversold if 2day-RSI is less than 10\n"
+        "- Evaluate moving average crossovers and price vs long-term moving averages\n"
+        "- Consider stochastic, Bollinger Bands, and other volatility indicators\n"
+        "- Factor in the Fear & Greed Index for market sentiment not don't give too much weight to final decision making\n\n"
+        "Summarize the market situation and provide your final recommendation.\n\n"
+        "**Important:** At the very end of your summary, you must include ONLY these two lines and NOTHING ELSE after them:\n"
+        "**Final Probability (UP):** <your calculated probability between 0 and 1 based on ALL factors, not just the ML model>\n"
+        "**Recommendation:** BUY or SELL (use BUY if probability > 0.5, SELL if probability <= 0.5)\n\n"
+        "Ensure your Final Probability and Recommendation are consistent with each other and with your overall analysis. "
+        "DO NOT add any additional text, explanations, or summaries after the Recommendation line."
+    )
+
+    ml_prediction = 0.5  # Default value
+    
+    user_prompt = (
+        f"User asked: Market summary for {ticker}\n\n"
+        f"TECHNICAL INDICATORS:\n"
+        f"- 2day-RSI: {analysis_results['rsi2']:.2f} (>90 = overbought, <10 = oversold)\n"
+        f"- 14day-RSI: {analysis_results['rsi14']:.2f} (>70 = overbought, <30 = oversold)\n"
+        f"- MACD Signal: {analysis_results['macd_signal']:.2f}\n"
+        f"- MACD Histogram: {analysis_results.get('macd_hist', 0):.2f}\n"
+        f"- Stochastic K: {analysis_results['stoch_k']:.2f} (>80 = overbought, <20 = oversold)\n"
+        f"- ATR (volatility): {analysis_results['atr']:.2f}\n"
+        f"- Bollinger Upper Band: {analysis_results['bb_uper']:.2f}\n"
+        f"- Bollinger Lower Band: {analysis_results['bb_lower']:.2f}\n"
+        f"- Support: {analysis_results['support']:.2f}\n"
+        f"- Resistance: {analysis_results['resistance']:.2f}\n"
+        f"\nTREND SIGNALS:\n"
+        f"- MA Crossover Signal: {analysis_results.get('ma_crossover', 'No data')}\n"
+        f"- Price vs MA200: {analysis_results.get('price_vs_ma200', 'No data')}\n"
+        f"\nMARKET SENTIMENT:\n"
+        f"- Fear & Greed Index: {fg_score} (0-25 = extreme fear, 25-50 = fear, 50-75 = greed, 75-100 = extreme greed)\n"
+        f"\nML MODEL PREDICTION:\n"
+        f"- Validation Accuracy: {ml_accuracy:.2f} (note: accuracy below 0.6 indicates limited reliability)\n"
+        f"- Predicted Probability of UP: {ml_prediction:.2f}\n"
+        f"\nProvide a concise market analysis based on ALL the above factors. Remember that your final probability should reflect your overall assessment, not just the ML model prediction. End your analysis with ONLY the Final Probability and Recommendation lines."
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.5,
+        max_tokens=500,
+    )
+
+    print("\n=== Market Summary ===\n")
+    print(response.choices[0].message.content)
+
+    return response.choices[0].message.content
 
 def get_default_dates():
     """Get default date range (past 5 years to today)"""
@@ -76,8 +136,11 @@ def interactive_run_backtest():
     # Initialize agents
     analysis_agent = AnalysisAgent()
     ml_agent = MLAgent(feature_list=indicators)
-    coordinator = InteractiveToolCallingAgent(analysis_agent, ml_agent, api_key=api_key)
     data_fetch_agent = DataFetchAgent(start=start_date, end=end_date)
+    
+    # Initialize OpenAI client for market summary generation
+    from openai import OpenAI
+    openai_client = OpenAI(api_key=api_key)
     
     # Fetch data
     print(f"\nFetching data for {ticker} from {start_date} to {end_date}...")
@@ -209,11 +272,13 @@ def interactive_run_backtest():
         ml_accuracy = ml_agent.train(enriched_df)
         print(f"ML accuracy: {ml_accuracy:.4f}")
         
-        # Use the handle_summary method directly instead of run_llm_with_tools
-        summary = coordinator.handle_summary(
-            ticker=ticker,
-            start_date=start_date,
-            end_date=current_date
+        # Generate market summary using OpenAI directly
+        summary = generate_market_summary(
+            openai_client,
+            analysis_results,
+            ml_accuracy,
+            ticker,
+            fg_df.loc[fg_df['date'] <= current_date].iloc[-1]['FG'] if not fg_df.empty else 0
         )
         
         # Extract LLM's final probability - looking for the exact format "**Final Probability (UP):** 0.45"

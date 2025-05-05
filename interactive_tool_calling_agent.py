@@ -10,6 +10,7 @@ from data_fetch_agent import DataFetchAgent
 from fear_greed_agent import get_fear_greed_score
 from visualization_agent import VisualizationAgent
 from feature_resolver import extract_features
+from interactive_run_backtest import interactive_run_backtest
 
 class InteractiveToolCallingAgent:
     def __init__(self, analysis_agent, ml_agent, api_key=None):
@@ -105,6 +106,18 @@ class InteractiveToolCallingAgent:
                         "required": ["ticker", "start_date", "end_date"]
                     }
                 }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "run_backtest",
+                    "description": "Run an interactive backtest of the trading strategy with customizable parameters. This will help validate the strategy's performance on historical data.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+                }
             }
         ]
 
@@ -194,8 +207,25 @@ class InteractiveToolCallingAgent:
             return self.handle_fear_greed(**args).tail(3).to_string(index=False)
         elif fn_name == "summarize_market_view":
             return self.handle_summary(**args)
+        elif fn_name == "run_backtest":
+            return self.handle_backtest()
         else:
             return f"Unknown function: {fn_name}"
+            
+    def handle_backtest(self):
+        """Handle the run_backtest function by calling the interactive_run_backtest function"""
+        print("\n=== Starting Interactive Backtest ===")
+        print("This will launch a separate interactive session for backtesting.")
+        print("The current session will be paused until the backtest is complete.")
+        print("Follow the prompts to configure and run your backtest.")
+        
+        # Call the interactive_run_backtest function
+        results_df = interactive_run_backtest()
+        
+        if results_df is not None and not results_df.empty:
+            return "Backtest completed successfully. Results have been saved to CSV."
+        else:
+            return "Backtest was cancelled or did not produce any results."
 
     def handle_plot(self, ticker: str, start_date: str, end_date: str):
         fetcher = DataFetchAgent(start=start_date, end=end_date)
