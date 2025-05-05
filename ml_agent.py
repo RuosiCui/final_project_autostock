@@ -3,12 +3,23 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from typing import List, Optional           
+
 
 class MLAgent:
-    def __init__(self):
-        self.model = LogisticRegression()
+    def __init__(
+        self,
+        feature_list: Optional[List[str]] = None,
+        model=None,
+    ):
+        # Default core set; caller can override
+        self.feature_list = feature_list or [
+            "close", "volume", "rsi2", "macd", "macd_signal", "sma"
+        ]
+        self.model = model or LogisticRegression(max_iter=1000)
         self.scaler = StandardScaler()
         self.is_trained = False
+        self.validation_accuracy: float | None = None   # for reference
 
     def train(self, historical_df: pd.DataFrame):
         """
@@ -23,7 +34,8 @@ class MLAgent:
         historical_df['target'] = (historical_df['close'].shift(-1) > historical_df['close']).astype(int)
 
         features = ['close', 'volume', 'rsi2', 'macd', 'macd_signal', 'sma']
-        X = historical_df[features]
+        #X = historical_df[features]
+        X = historical_df[self.feature_list]
         y = historical_df['target']
 
         X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
@@ -41,7 +53,7 @@ class MLAgent:
         print(f"Validation Accuracy: {accuracy:.2f}")
         return accuracy 
 
-    def predict(self, today_row: pd.Series) -> int:
+    def predict(self, today_row: pd.Series) -> float:
         """
         Predict next-day movement for today's feature row.
 
@@ -54,10 +66,11 @@ class MLAgent:
         if not self.is_trained:
             raise ValueError("Model not trained yet!")
 
-        features = ['close', 'volume', 'rsi2', 'macd', 'macd_signal', 'sma']
-        X_today = today_row[features].values.reshape(1, -1)
+        #features = ['close', 'volume', 'rsi2', 'macd', 'macd_signal', 'sma']
+        #X_today = today_row[features].values.reshape(1, -1)
+        X_today = today_row[self.feature_list].values.reshape(1, -1)
         X_today_scaled = self.scaler.transform(X_today)
-        pred = self.model.predict(X_today_scaled)[0]
+        pred = self.model.predict_proba(X_today_scaled)[0][1]
         return pred
 
 # Example usage:

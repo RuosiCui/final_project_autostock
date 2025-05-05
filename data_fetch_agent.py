@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 class DataFetchAgent:
-    def __init__(self, start: str = None, end: str = None, lookback_days: int = 60):
+    def __init__(self, start: str = None, end: str = None, lookback_days: int = 500):
         """
         Initialize the agent with optional date range or fallback to lookback_days.
 
@@ -22,8 +22,6 @@ class DataFetchAgent:
 
         Returns a DataFrame with ['date', 'open', 'close', 'high', 'low', 'volume']
         """
-        print(self.start)
-        print(self.end)
 
         if self.start and self.end:
             end_dt = pd.to_datetime(self.end)
@@ -31,7 +29,6 @@ class DataFetchAgent:
             df = yf.download(ticker, start=self.start, end=end_plus_one, interval="1d", progress=False)
         else:
             df = yf.download(ticker, period=f"{self.lookback_days}d", interval="1d", progress=False)
-        print(df.tail)
         if df.empty:
             raise ValueError(f"No data returned for ticker: {ticker}")
 

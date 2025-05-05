@@ -20,32 +20,57 @@ class AnalysisAgent:
         """
         df = historical_df.sort_values('date').copy()
 
-        # Compute indicators
-        df['rsi2'] = ta.momentum.RSIIndicator(close=df['close'], window=self.rsi_length).rsi()
-        macd_obj = ta.trend.MACD(close=df['close'])
-        df['macd'] = macd_obj.macd()
-        df['macd_signal'] = macd_obj.macd_signal()
-        df['sma'] = ta.trend.SMAIndicator(close=df['close'], window=self.sma_window).sma_indicator()
-        df['support'] = df['low'].rolling(window=20).min()
-        df['resistance'] = df['high'].rolling(window=20).max()
-        df = df.copy()
-        # Momentum
-        df["rsi14"] = ta.momentum.rsi(df["close"], window=14)
-        df["stoch_k"] = ta.momentum.stoch(df["high"], df["low"], df["close"])
-        # Volatility
-        df["atr"] = ta.volatility.average_true_range(df["high"], df["low"], df["close"])
-        # Trend
-        df["ema12"] = ta.trend.ema_indicator(df["close"], 12)
-        df["ema26"] = ta.trend.ema_indicator(df["close"], 26)
-        df["dist_sma200"] = (df["close"] - ta.trend.sma_indicator(df["close"], 200)) / \
-                            ta.trend.sma_indicator(df["close"], 200)
-        # Volume ratio
-        df["vol_ratio"] = df["volume"] / df["volume"].rolling(20).mean()
-        # Calendar
-        df["dow"] = df["date"].dt.dayofweek           # 0‑Mon … 4‑Fri
-        df["month"] = df["date"].dt.month
-        df["bb_upper"]  = ta.volatility.bollinger_hband(df["close"])
-        df["bb_lower"]  = ta.volatility.bollinger_lband(df["close"])
+                # Compute indicators
+                # ─────────────────────────────────────────────────────────────
+        # 1) CORE PRICE‑BASED INDICATORS
+        # ─────────────────────────────────────────────────────────────
+        df["rsi2"]       = ta.momentum.RSIIndicator(df["close"], window=2).rsi()
+        df["rsi14"]      = ta.momentum.rsi(df["close"], window=14)           # same as above, 14‑period
+
+        macd             = ta.trend.MACD(df["close"])
+        df["macd"]        = macd.macd()
+        df["macd_signal"] = macd.macd_signal()
+        df["macd_hist"]   = macd.macd_diff()
+
+        # Simple & exponential MAs
+        df["sma20"]   = ta.trend.sma_indicator(df["close"], window=20)
+        df["sma50"]   = ta.trend.sma_indicator(df["close"], window=50)
+        df["sma200"]  = ta.trend.sma_indicator(df["close"], window=200)
+        df["ema12"]   = ta.trend.ema_indicator(df["close"], 12)
+        df["ema26"]   = ta.trend.ema_indicator(df["close"], 26)
+        df["dist_sma200"] = (df["close"] - df["sma200"]) / df["sma200"]
+
+        # ─────────────────────────────────────────────────────────────
+        # 2) VOLATILITY / RANGE
+        # ─────────────────────────────────────────────────────────────
+        df["atr"]         = ta.volatility.average_true_range(df["high"], df["low"], df["close"])
+        df["bb_upper"]    = ta.volatility.bollinger_hband(df["close"])
+        df["bb_lower"]    = ta.volatility.bollinger_lband(df["close"])
+        df["bb_width"]    = (df["bb_upper"] - df["bb_lower"]) / df["close"]   # normalised width
+
+        # ─────────────────────────────────────────────────────────────
+        # 3) MOMENTUM / OSCILLATORS
+        # ─────────────────────────────────────────────────────────────
+        df["stoch_k"]     = ta.momentum.stoch(df["high"], df["low"], df["close"])
+        df["roc10"]       = ta.momentum.roc(df["close"], window=10)           # 10‑day rate of change
+        df["cci20"]       = ta.trend.cci(df["high"], df["low"], df["close"], window=20)
+
+        # ─────────────────────────────────────────────────────────────
+        # 4) VOLUME / FLOW
+        # ─────────────────────────────────────────────────────────────
+        df["vol_ratio"]   = df["volume"] / df["volume"].rolling(20).mean()
+        df["mfi14"]       = ta.volume.money_flow_index(df["high"], df["low"], df["close"], df["volume"], window=14)
+        df["obv"]         = ta.volume.on_balance_volume(df["close"], df["volume"])
+
+        # ─────────────────────────────────────────────────────────────
+        # 5) SUPPORT / RESISTANCE + CALENDAR
+        # ─────────────────────────────────────────────────────────────
+        df["support"]     = df["low"].rolling(20).min()
+        df["resistance"]  = df["high"].rolling(20).max()
+        df["dow"]         = df["date"].dt.dayofweek
+        df["month"]       = df["date"].dt.month
+        # ─────────────────────────────────────────────────────────────
+
 
         # Drop rows with NaN due to rolling/EMA
         df.dropna(inplace=True)
@@ -56,7 +81,10 @@ class AnalysisAgent:
             'rsi14': latest['rsi14'],
             'macd': latest['macd'],
             'macd_signal': latest['macd_signal'],
-            'sma': latest['sma'],
+            "macd_hist" : latest["macd_hist"],
+            'sma': latest['sma200'],
+            "sma20": latest["sma20"],
+            "sma50": latest["sma50"],
             'support': latest['support'],
             'resistance': latest['resistance'],
             "stoch_k": latest["stoch_k"],
@@ -64,6 +92,10 @@ class AnalysisAgent:
             'vol_ratio': latest['vol_ratio'],
             'bb_uper': latest['bb_upper'],
             'bb_lower': latest['bb_lower'],
+            "bb_width": latest["bb_width"],
+            "roc10": latest["roc10"],
+            "cci20": latest["cci20"],
+            "mfi14": latest["mfi14"],
             'today_vol/20d_avg': latest['vol_ratio']
         }
 

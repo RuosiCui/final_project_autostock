@@ -30,7 +30,6 @@ def fetch_latest_score() -> pd.DataFrame:
         date = pd.to_datetime(data['timestamp']).date()
         score = int(round(data['score']))
         df = pd.DataFrame([{'date': date, 'FG': score}])
-        print(df)
     else:
         raise Exception("Unexpected format for 'fear_and_greed' data from API")
 
