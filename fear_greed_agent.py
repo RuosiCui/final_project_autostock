@@ -5,7 +5,12 @@ from typing import Optional
 import cloudscraper
 
 
-HISTORICAL_CSV_PATH = "fear_greed_history.csv"
+import os
+
+# Get the directory of the current script
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Path to the CSV file in the same directory as the script
+HISTORICAL_CSV_PATH = os.path.join(SCRIPT_DIR, "fear_greed_history.csv")
 REALTIME_API_URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata/"
 
 def load_historical_data() -> pd.DataFrame:
