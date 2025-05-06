@@ -70,11 +70,13 @@ Incorporates market sentiment:
 
 #### 6. Visualization Agent (`visualization_agent.py`)
 
-Creates visual representations:
-- Generates interactive stock charts
-- Plots technical indicators
-- Visualizes support and resistance levels
-- Creates custom visualization layouts
+Creates interactive visual representations:
+- Generates interactive Plotly-based stock charts
+- Displays candlestick patterns with hover information
+- Plots technical indicators (RSI, MACD) with overbought/oversold levels
+- Includes time period selectors (1m, 3m, 6m, 1y, YTD, All)
+- Provides zoom, pan, and export capabilities
+- Displays detailed information on hover
 
 #### 7. Interactive Backtest Agent (`interactive_run_backtest.py`)
 
@@ -134,7 +136,7 @@ The system provides comprehensive performance metrics for backtesting:
 - **Data Source**: Yahoo Finance API
 - **ML Framework**: Scikit-learn
 - **LLM Integration**: OpenAI GPT-4o
-- **Visualization**: Matplotlib, Plotly
+- **Visualization**: Plotly (interactive charts)
 - **Natural Language Processing**: Custom feature extraction
 
 ## Future Enhancements
@@ -144,20 +146,45 @@ The system provides comprehensive performance metrics for backtesting:
 - Fundamental analysis integration
 - Real-time market data streaming
 - Automated trading capabilities
-- Enhanced visualization options
+- Additional technical indicators
+- Pattern recognition visualization
+- Correlation heatmaps
 
 ## Getting Started
 
 1. Install required dependencies:
    ```
    pip install -r requirements.txt
+   pip install -r requirements-viz.txt
    ```
 
-2. Run the interactive agent:
+2. Test the visualization (optional):
+   ```
+   python final_project_autostock/test_visualization.py
+   ```
+
+3. Run the interactive agent:
    ```
    python final_project_autostock/interactive_tool_calling_agent.py
    ```
 
-3. Enter your OpenAI API key when prompted
+4. Enter your OpenAI API key when prompted
 
-4. Start asking questions and analyzing stocks!
+5. Start asking questions and analyzing stocks!
+
+## Visualization Enhancements
+
+The visualization system has been upgraded from static matplotlib charts to interactive Plotly charts with the following features:
+
+- **Candlestick Charts**: View OHLC (Open, High, Low, Close) data in traditional candlestick format
+- **Interactive Elements**: Zoom, pan, and hover for detailed information
+- **Time Period Selection**: Easily switch between different time ranges (1m, 3m, 6m, 1y, YTD, All)
+- **Enhanced Indicators**: Clearer visualization of RSI, MACD with overbought/oversold levels
+- **Hover Details**: Get precise values when hovering over any data point
+- **Dark Theme**: Modern dark theme for better contrast and reduced eye strain
+- **MACD Histogram**: Color-coded histogram showing bullish/bearish momentum
+
+To test the visualization independently:
+```
+python final_project_autostock/test_visualization.py
+```

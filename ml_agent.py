@@ -32,6 +32,7 @@ class MLAgent:
 
         # Create target: next day up (1) or down (0)
         historical_df['target'] = (historical_df['close'].shift(-1) > historical_df['close']).astype(int)
+        historical_df = historical_df.dropna()
 
         features = ['close', 'volume', 'rsi2', 'macd', 'macd_signal', 'sma']
         #X = historical_df[features]

@@ -28,7 +28,7 @@ class InteractiveToolCallingAgent:
                 "type": "function",
                 "function": {
                     "name": "plot_stock_chart",
-                    "description": "Generate interactive stock chart with RSI, SMA, and MACD.",
+                    "description": "Generate interactive stock chart with given date.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -195,6 +195,7 @@ class InteractiveToolCallingAgent:
 
     def dispatch_function(self, fn_name: str, args: dict):
         if fn_name == "plot_stock_chart":
+            print(args)
             self.handle_plot(**args)
             return "Chart generated and saved."
         elif fn_name == "train_model":
@@ -204,6 +205,7 @@ class InteractiveToolCallingAgent:
             result, _ = self.handle_analysis(**args)
             return json.dumps(result, indent=2)
         elif fn_name == "get_fear_greed":
+            print(args)
             return self.handle_fear_greed(**args).tail(3).to_string(index=False)
         elif fn_name == "summarize_market_view":
             return self.handle_summary(**args)
@@ -231,7 +233,7 @@ class InteractiveToolCallingAgent:
         fetcher = DataFetchAgent(start=start_date, end=end_date)
         df = fetcher.fetch(ticker)
         _, enriched_df = self.analysis_agent.analyze(df)
-        self.viz_agent.plot(enriched_df, ticker)
+        self.viz_agent.plot(enriched_df, ticker, add_benchmarks=True)
 
     def handle_train(self, ticker: str, start_date: str, end_date: str, indicators: List[str]):
         # Convert user-friendly indicator names to canonical names using feature_resolver
