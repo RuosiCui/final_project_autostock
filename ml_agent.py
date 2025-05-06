@@ -3,8 +3,7 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from typing import List, Optional           
-
+from typing import List, Optional          
 
 class MLAgent:
     def __init__(
@@ -86,7 +85,7 @@ class MLAgent:
         #features = ['close', 'volume', 'rsi2', 'macd', 'macd_signal', 'sma']
         #X_today = today_row[features].values.reshape(1, -1)
         #X_today = today_row[self.feature_list].values.reshape(1, -1)
-        X_today = pd.DataFrame([today_row[self.feature_list].values], columns=self.feature_list)
+        X_today = pd.DataFrame([today_row[self.feature_list]], columns=self.feature_list)
         X_today_scaled = self.scaler.transform(X_today)
         pred = self.model.predict_proba(X_today_scaled)[0][1]
         return pred
