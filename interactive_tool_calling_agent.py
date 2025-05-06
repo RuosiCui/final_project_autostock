@@ -55,9 +55,13 @@ class InteractiveToolCallingAgent:
                             "indicators": {
                                 "type": "array",
                                 "items": {"type": "string"}
+                            },
+                            "hold_days": {
+                                "type": "integer",
+                                "description": "Number of days to hold the stock for the prediction"
                             }
                         },
-                        "required": ["ticker", "indicators"]
+                        "required": ["ticker", "hold_days", "indicators"]
                     }
                 }
             },
@@ -102,9 +106,13 @@ class InteractiveToolCallingAgent:
                         "properties": {
                             "ticker": {"type": "string"},
                             "start_date": {"type": "string"},
-                            "end_date": {"type": "string"}
+                            "end_date": {"type": "string"},
+                            "hold_days": {
+                                "type": "integer",
+                                "description": "Number of days to hold the stock for the prediction"
+                            }
                         },
-                        "required": ["ticker"]
+                        "required": ["ticker","hold_days"]
                     }
                 }
             },
@@ -115,8 +123,13 @@ class InteractiveToolCallingAgent:
                     "description": "Run an interactive backtest of the trading strategy with customizable parameters. This will help validate the strategy's performance on historical data.",
                     "parameters": {
                         "type": "object",
-                        "properties": {},
-                        "required": []
+                        "properties": {
+                            "hold_days": {
+                                "type": "integer",
+                                "description": "Number of days to hold the stock before evaluating the outcome"
+                            }
+                        },
+                        "required": ["hold_days"]
                     }
                 }
             }
@@ -235,11 +248,11 @@ class InteractiveToolCallingAgent:
         elif fn_name == "summarize_market_view":
             return self.handle_summary(**args)
         elif fn_name == "run_backtest":
-            return self.handle_backtest()
+            return self.handle_backtest(**args)
         else:
             return f"Unknown function: {fn_name}"
             
-    def handle_backtest(self):
+    def handle_backtest(self, hold_days: int = 1):
         """Handle the run_backtest function by calling the interactive_run_backtest function"""
         print("\n=== Starting Interactive Backtest ===")
         print("This will launch a separate interactive session for backtesting.")
@@ -247,7 +260,7 @@ class InteractiveToolCallingAgent:
         print("Follow the prompts to configure and run your backtest.")
         
         # Call the interactive_run_backtest function
-        results_df = interactive_run_backtest()
+        results_df = interactive_run_backtest(hold_days=hold_days,api_key=self.api_key)
         
         if results_df is not None and not results_df.empty:
             return "Backtest completed successfully. Results have been saved to CSV."
@@ -264,7 +277,7 @@ class InteractiveToolCallingAgent:
         _, enriched_df = self.analysis_agent.analyze(df)
         self.viz_agent.plot(enriched_df, ticker, add_benchmarks=True)
 
-    def handle_train(self, ticker: str, indicators: List[str], start_date: str = None, end_date: str = None):
+    def handle_train(self, ticker: str, indicators: List[str], start_date: str = None, end_date: str = None, hold_days: int = 1):
         # Get dates if not provided
         if start_date is None or end_date is None:
             start_date, end_date = self.prompt_for_dates({"start_date": start_date, "end_date": end_date})
@@ -284,7 +297,7 @@ class InteractiveToolCallingAgent:
         
         fetcher = DataFetchAgent(start=start_date, end=end_date)
         df = fetcher.fetch(ticker)
-        ml_agent = MLAgent(feature_list=canonical_indicators)
+        ml_agent = MLAgent(feature_list=canonical_indicators,hold_days=hold_days)
         _, enriched_df = self.analysis_agent.analyze(df)
         
         # Verify all requested indicators exist in the DataFrame
@@ -317,7 +330,7 @@ class InteractiveToolCallingAgent:
             print(f"Using date range: {start_date} to {end_date}")
         return get_fear_greed_score(start_date, end_date)
 
-    def handle_summary(self, ticker: str, start_date: str = None, end_date: str = None):
+    def handle_summary(self, ticker: str, start_date: str = None, end_date: str = None, hold_days: int = 1):
         # Get dates if not provided
         if start_date is None or end_date is None:
             start_date, end_date = self.prompt_for_dates({"start_date": start_date, "end_date": end_date})
@@ -332,7 +345,7 @@ class InteractiveToolCallingAgent:
         print(f"Using indicators for market summary: {features_to_use}")
         
         # Create a new ML agent with the selected features
-        temp_ml_agent = MLAgent(feature_list=features_to_use)
+        temp_ml_agent = MLAgent(feature_list=features_to_use,hold_days=hold_days)
         
         # Verify all requested indicators exist in the DataFrame
         missing_indicators = [ind for ind in features_to_use if ind not in enriched_df.columns]
@@ -351,7 +364,7 @@ class InteractiveToolCallingAgent:
                     return "Error: No valid indicators available for ML prediction."
             
             # Recreate ML agent with valid indicators
-            temp_ml_agent = MLAgent(feature_list=features_to_use)
+            temp_ml_agent = MLAgent(feature_list=features_to_use,hold_days=hold_days)
         
         ml_accuracy = temp_ml_agent.train(enriched_df)
         today_row = enriched_df.iloc[-1]
@@ -364,10 +377,11 @@ class InteractiveToolCallingAgent:
             fg_value, ml_accuracy
         )
 
-    def generate_summary_with_llm(self, analysis_results: dict, ml_prediction: int, user_input: str, fg_score: float, ml_accuracy: float) -> str:
+    def generate_summary_with_llm(self, analysis_results: dict, ml_prediction: int, user_input: str, fg_score: float, ml_accuracy: float,hold_days: int = 1,) -> str:
         system_prompt = (
-            "You are a financial analyst assistant. Analyze the market situation based on all available data including technical indicators, "
-            "market sentiment, and machine learning predictions. When the ML model accuracy is low (below 0.6), give it less weight in your analysis.\n\n"
+            f"You are a financial analyst assistant. Analyze the market situation based on all available data including technical indicators, "
+            f"market sentiment, and machine learning predictions. The goal is to predict the stock movement over the next **{hold_days} day(s)**.\n\n"
+            "When the ML model accuracy is low (below 0.55), give it less weight in your analysis. But above 0.55 is considered OK.\n\n"
             "Use these guidelines for your analysis:\n"
             "- Consider a stock overbought if 2day-RSI is greater than 90\n"
             "- Consider a stock oversold if 2day-RSI is less than 10\n"
@@ -384,6 +398,7 @@ class InteractiveToolCallingAgent:
 
         user_prompt = (
             f"User asked: {user_input}\n\n"
+            f"Objective: Predict whether this stock will go up or down over the next {hold_days} day(s).\n\n"
             f"TECHNICAL INDICATORS:\n"
             f"- 2day-RSI: {analysis_results['rsi2']:.2f} (>90 = overbought, <10 = oversold)\n"
             f"- 14day-RSI: {analysis_results['rsi14']:.2f} (>70 = overbought, <30 = oversold)\n"
@@ -401,7 +416,7 @@ class InteractiveToolCallingAgent:
             f"\nMARKET SENTIMENT:\n"
             f"- Fear & Greed Index: {fg_score} (0-25 = extreme fear, 25-50 = fear, 50-75 = greed, 75-100 = extreme greed)\n"
             f"\nML MODEL PREDICTION:\n"
-            f"- Validation Accuracy: {ml_accuracy:.2f} (note: accuracy below 0.6 indicates limited reliability)\n"
+            f"- Validation Accuracy: {ml_accuracy:.2f} (note: accuracy below 0.55 indicates limited reliability)\n"
             f"- Predicted Probability of UP: {ml_prediction:.2f}\n"
             f"\nProvide a concise market analysis based on ALL the above factors. Remember that your final probability should reflect your overall assessment, not just the ML model prediction. End your analysis with ONLY the Final Probability and Recommendation lines."
         )

@@ -3,6 +3,7 @@ from ml_agent import MLAgent
 from data_fetch_agent import DataFetchAgent
 from fear_greed_agent import get_fear_greed_score
 from feature_resolver import extract_features
+from typing import Optional
 import pandas as pd
 import numpy as np
 import os
@@ -10,11 +11,11 @@ import re
 from datetime import datetime, timedelta
 import json
 
-def generate_market_summary(client, analysis_results, ml_accuracy, ticker, fg_score):
+def generate_market_summary(client, analysis_results, ml_accuracy,ml_prediction,ticker, hold_days,fg_score):
     """Generate a market summary using OpenAI API directly"""
     system_prompt = (
         "You are a financial analyst assistant. Analyze the market situation based on all available data including technical indicators, "
-        "market sentiment, and machine learning predictions. When the ML model accuracy is low (below 0.6), give it less weight in your analysis.\n\n"
+        "market sentiment, and machine learning predictions. When the ML model accuracy is low (below 0.55), give it less weight in your analysis.\n\n"
         "Use these guidelines for your analysis:\n"
         "- Consider a stock overbought if 2day-RSI is greater than 90\n"
         "- Consider a stock oversold if 2day-RSI is less than 10\n"
@@ -29,10 +30,10 @@ def generate_market_summary(client, analysis_results, ml_accuracy, ticker, fg_sc
         "DO NOT add any additional text, explanations, or summaries after the Recommendation line."
     )
 
-    ml_prediction = 0.5  # Default value
     
     user_prompt = (
         f"User asked: Market summary for {ticker}\n\n"
+        f"Objective: Predict whether this stock will go up or down over the next {hold_days} day(s).\n\n"
         f"TECHNICAL INDICATORS:\n"
         f"- 2day-RSI: {analysis_results['rsi2']:.2f} (>90 = overbought, <10 = oversold)\n"
         f"- 14day-RSI: {analysis_results['rsi14']:.2f} (>70 = overbought, <30 = oversold)\n"
@@ -50,7 +51,7 @@ def generate_market_summary(client, analysis_results, ml_accuracy, ticker, fg_sc
         f"\nMARKET SENTIMENT:\n"
         f"- Fear & Greed Index: {fg_score} (0-25 = extreme fear, 25-50 = fear, 50-75 = greed, 75-100 = extreme greed)\n"
         f"\nML MODEL PREDICTION:\n"
-        f"- Validation Accuracy: {ml_accuracy:.2f} (note: accuracy below 0.6 indicates limited reliability)\n"
+        f"- Validation Accuracy: {ml_accuracy:.2f} (note: accuracy below 0.55 indicates limited reliability)\n"
         f"- Predicted Probability of UP: {ml_prediction:.2f}\n"
         f"\nProvide a concise market analysis based on ALL the above factors. Remember that your final probability should reflect your overall assessment, not just the ML model prediction. End your analysis with ONLY the Final Probability and Recommendation lines."
     )
@@ -76,13 +77,13 @@ def get_default_dates():
     start_date = (datetime.now() - timedelta(days=5*365)).strftime("%Y-%m-%d")
     return start_date, end_date
 
-def interactive_run_backtest():
+def interactive_run_backtest(hold_days: int = 1, api_key: Optional[str] = None):
     """Interactive version of run_backtest with user inputs and ML model verification"""
     print("=== Interactive Backtest Tool ===")
     print("This tool will run a backtest of the trading strategy on historical data.")
     
-    # Get OpenAI API key
-    api_key = input("Please enter your OpenAI API key: ").strip()
+    # # Get OpenAI API key
+    # api_key = input("Please enter your OpenAI API key: ").strip()
     if not api_key:
         print("Error: API key is required.")
         return
@@ -135,7 +136,7 @@ def interactive_run_backtest():
     
     # Initialize agents
     analysis_agent = AnalysisAgent()
-    ml_agent = MLAgent(feature_list=indicators)
+    ml_agent = MLAgent(feature_list=indicators,hold_days=hold_days)
     data_fetch_agent = DataFetchAgent(start=start_date, end=end_date)
     
     # Initialize OpenAI client for market summary generation
@@ -166,7 +167,7 @@ def interactive_run_backtest():
             print("Error: No valid indicators available. Please try again with different indicators.")
             return
         print(f"Proceeding with valid indicators: {valid_indicators}")
-        ml_agent = MLAgent(feature_list=valid_indicators)
+        ml_agent = MLAgent(feature_list=valid_indicators,hold_days=hold_days)
     
     # We'll verify the ML model on the initial training period instead of the full dataset
     # This is moved to after the initial training window setup
@@ -190,11 +191,11 @@ def interactive_run_backtest():
         print(f"Error: Not enough data for initial ML training after preprocessing. Need at least 300 days, but only have {len(initial_enriched_df)}.")
         return
     
-    initial_ml_accuracy = ml_agent.train(initial_enriched_df)
-    print(f"Initial ML Model Accuracy: {initial_ml_accuracy:.4f}")
+    ml_accuracy = ml_agent.train(initial_enriched_df)
+    print(f"Initial ML Model Accuracy: {ml_accuracy:.4f}")
     
     # Loop to allow the user to try different indicators if accuracy is low
-    while initial_ml_accuracy < 0.52:
+    while ml_accuracy < 0.55:
         print("\nWARNING: Initial ML model accuracy is very low (barely better than random).")
         proceed = input("Do you want to proceed with the backtest anyway? (y/n): ").strip().lower()
         
@@ -237,17 +238,17 @@ def interactive_run_backtest():
             indicators = valid_indicators
         
         # Create a new ML agent with the new indicators
-        ml_agent = MLAgent(feature_list=indicators)
+        ml_agent = MLAgent(feature_list=indicators, hold_days=hold_days)
         
         # Retrain the model
         print("\n=== Retraining ML Model ===")
         print(f"Training ML model on first {lookback_window} days of data with new indicators...")
-        initial_ml_accuracy = ml_agent.train(initial_enriched_df)
-        print(f"New ML Model Accuracy: {initial_ml_accuracy:.4f}")
+        ml_accuracy = ml_agent.train(initial_enriched_df, validate=True)
+        print(f"New ML Model Accuracy: {ml_accuracy:.4f}")
     
     print(f"\n=== Starting Backtest ===")
     print(f"Using initial training window of {lookback_window} days")
-    print(f"Will test on {len(df_full) - lookback_window - 1} trading days")
+    print(f"Will test on {len(df_full) - lookback_window - hold_days} trading days")
     
     # Ask for confirmation
     proceed = input("Ready to start backtest? This may take a while. (y/n): ").strip().lower()
@@ -257,9 +258,9 @@ def interactive_run_backtest():
     
     # Run backtest
     results = []
-    for i in range(lookback_window, len(df_full) - 1):  # Leave one row for ground truth
+    for i in range(lookback_window, len(df_full) - hold_days):  # Leave one row for ground truth
         current_date = df_full.iloc[i]["date"].strftime("%Y-%m-%d")
-        print(f"\nProcessing day {i-lookback_window+1} of {len(df_full)-lookback_window-1}: {current_date}")
+        print(f"\nProcessing day {i-lookback_window+1} of {len(df_full)-lookback_window-hold_days}: {current_date}")
         
         # Use a rolling window that includes the initial lookback_window days plus all days up to current day
         df_partial = df_full.iloc[:i+1].copy()
@@ -269,15 +270,19 @@ def interactive_run_backtest():
             continue  # Skip if too few rows to train
         
         # Train ML model on all available data up to current day
-        ml_accuracy = ml_agent.train(enriched_df)
-        print(f"ML accuracy: {ml_accuracy:.4f}")
+        ml_agent.train(enriched_df, validate=False)
+        today_row = enriched_df.iloc[-1]
+        ml_prediction = ml_agent.predict(today_row)
+        print(f"ML prediction: {ml_prediction:.4f}")
         
         # Generate market summary using OpenAI directly
         summary = generate_market_summary(
             openai_client,
             analysis_results,
             ml_accuracy,
+            ml_prediction,
             ticker,
+            hold_days,
             fg_df.loc[fg_df['date'] <= current_date].iloc[-1]['FG'] if not fg_df.empty else 0
         )
         
@@ -332,7 +337,7 @@ def interactive_run_backtest():
         llm_decision = 1 if recommendation == "BUY" else 0
         
         # Actual price movement (next day vs today)
-        actual = int(df_full.iloc[i+1]["close"] > df_full.iloc[i]["close"])
+        actual = int(df_full.iloc[i+hold_days]["close"] > df_full.iloc[i]["close"])
         correct = llm_decision == actual
         
         result = {

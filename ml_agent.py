@@ -11,6 +11,7 @@ class MLAgent:
         self,
         feature_list: Optional[List[str]] = None,
         model=None,
+        hold_days: int = 1
     ):
         # Default core set; caller can override
         self.feature_list = feature_list or [
@@ -20,8 +21,9 @@ class MLAgent:
         self.scaler = StandardScaler()
         self.is_trained = False
         self.validation_accuracy: float | None = None   # for reference
+        self.hold_days = hold_days
 
-    def train(self, historical_df: pd.DataFrame):
+    def train(self, historical_df: pd.DataFrame, validate: bool = True):
         """
         Train the ML model to predict next-day price movement (up/down).
 
@@ -30,29 +32,43 @@ class MLAgent:
         """
         historical_df = historical_df.dropna()
 
-        # Create target: next day up (1) or down (0)
-        historical_df['target'] = (historical_df['close'].shift(-1) > historical_df['close']).astype(int)
+        # Create target: Next X day up (1) or down (0)
+        print("hold days:", self.hold_days)
+        historical_df['target'] = (historical_df['close'].shift(-self.hold_days) > historical_df['close']).astype(int)
         historical_df = historical_df.dropna()
 
-        features = ['close', 'volume', 'rsi2', 'macd', 'macd_signal', 'sma']
         #X = historical_df[features]
         X = historical_df[self.feature_list]
         y = historical_df['target']
 
-        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
+        if validate:
+            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
+            X_train_scaled = self.scaler.fit_transform(X_train)
+            X_val_scaled = self.scaler.transform(X_val)
+            self.model.fit(X_train_scaled, y_train)
+            self.is_trained = True
+            self.validation_accuracy = self.model.score(X_val_scaled, y_val)
+            return self.validation_accuracy
+        else:
+            X_scaled = self.scaler.fit_transform(X)
+            self.model.fit(X_scaled, y)
+            self.is_trained = True
+            return None
 
-        # Normalize features
-        X_train_scaled = self.scaler.fit_transform(X_train)
-        X_val_scaled = self.scaler.transform(X_val)
+        # X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
 
-        # Train model
-        self.model.fit(X_train_scaled, y_train)
-        self.is_trained = True
+        # # Normalize features
+        # X_train_scaled = self.scaler.fit_transform(X_train)
+        # X_val_scaled = self.scaler.transform(X_val)
 
-        # Validation accuracy (optional for printing)
-        accuracy = self.model.score(X_val_scaled, y_val)
-        print(f"Validation Accuracy: {accuracy:.2f}")
-        return accuracy 
+        # # Train model
+        # self.model.fit(X_train_scaled, y_train)
+        # self.is_trained = True
+
+        # # Validation accuracy (optional for printing)
+        # accuracy = self.model.score(X_val_scaled, y_val)
+        # print(f"Validation Accuracy: {accuracy:.2f}")
+        # return accuracy 
 
     def predict(self, today_row: pd.Series) -> float:
         """
@@ -69,7 +85,8 @@ class MLAgent:
 
         #features = ['close', 'volume', 'rsi2', 'macd', 'macd_signal', 'sma']
         #X_today = today_row[features].values.reshape(1, -1)
-        X_today = today_row[self.feature_list].values.reshape(1, -1)
+        #X_today = today_row[self.feature_list].values.reshape(1, -1)
+        X_today = pd.DataFrame([today_row[self.feature_list].values], columns=self.feature_list)
         X_today_scaled = self.scaler.transform(X_today)
         pred = self.model.predict_proba(X_today_scaled)[0][1]
         return pred
