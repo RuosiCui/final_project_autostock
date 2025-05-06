@@ -2,8 +2,9 @@ import os
 import re
 import json
 import pandas as pd
+import datetime
 from openai import OpenAI
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from analysis_agent import AnalysisAgent
 from ml_agent import MLAgent
 from data_fetch_agent import DataFetchAgent
@@ -36,7 +37,7 @@ class InteractiveToolCallingAgent:
                             "start_date": {"type": "string", "format": "date"},
                             "end_date": {"type": "string", "format": "date"}
                         },
-                        "required": ["ticker", "start_date", "end_date"]
+                        "required": ["ticker"]
                     }
                 }
             },
@@ -56,7 +57,7 @@ class InteractiveToolCallingAgent:
                                 "items": {"type": "string"}
                             }
                         },
-                        "required": ["ticker", "start_date", "end_date", "indicators"]
+                        "required": ["ticker", "indicators"]
                     }
                 }
             },
@@ -72,7 +73,7 @@ class InteractiveToolCallingAgent:
                             "start_date": {"type": "string", "format": "date"},
                             "end_date": {"type": "string", "format": "date"}
                         },
-                        "required": ["ticker", "start_date", "end_date"]
+                        "required": ["ticker"]
                     }
                 }
             },
@@ -87,7 +88,7 @@ class InteractiveToolCallingAgent:
                             "start_date": {"type": "string", "format": "date"},
                             "end_date": {"type": "string", "format": "date"}
                         },
-                        "required": ["start_date", "end_date"]
+                        "required": []
                     }
                 }
             },
@@ -103,7 +104,7 @@ class InteractiveToolCallingAgent:
                             "start_date": {"type": "string"},
                             "end_date": {"type": "string"}
                         },
-                        "required": ["ticker", "start_date", "end_date"]
+                        "required": ["ticker"]
                     }
                 }
             },
@@ -193,6 +194,30 @@ class InteractiveToolCallingAgent:
         # Return both the final response and the updated conversation history
         return response.choices[0].message.content, conversation_history
 
+    def get_default_dates(self) -> Tuple[str, str]:
+        """Return default start and end dates"""
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        default_start = "2010-01-01"
+        return default_start, today
+        
+    def prompt_for_dates(self, args: dict) -> Tuple[str, str]:
+        """Prompt user for start and end dates if not provided"""
+        default_start, default_end = self.get_default_dates()
+        
+        start_date = args.get("start_date")
+        if not start_date:
+            print(f"\nStart date not provided. Enter start date (YYYY-MM-DD) or press Enter for default ({default_start}):")
+            user_input = input().strip()
+            start_date = user_input if user_input else default_start
+            
+        end_date = args.get("end_date")
+        if not end_date:
+            print(f"\nEnd date not provided. Enter end date (YYYY-MM-DD) or press Enter for default (today: {default_end}):")
+            user_input = input().strip()
+            end_date = user_input if user_input else default_end
+            
+        return start_date, end_date
+
     def dispatch_function(self, fn_name: str, args: dict):
         if fn_name == "plot_stock_chart":
             print(args)
@@ -229,13 +254,21 @@ class InteractiveToolCallingAgent:
         else:
             return "Backtest was cancelled or did not produce any results."
 
-    def handle_plot(self, ticker: str, start_date: str, end_date: str):
+    def handle_plot(self, ticker: str, start_date: str = None, end_date: str = None):
+        # Get dates if not provided
+        if start_date is None or end_date is None:
+            start_date, end_date = self.prompt_for_dates({"start_date": start_date, "end_date": end_date})
+            print(f"Using date range: {start_date} to {end_date}")
         fetcher = DataFetchAgent(start=start_date, end=end_date)
         df = fetcher.fetch(ticker)
         _, enriched_df = self.analysis_agent.analyze(df)
         self.viz_agent.plot(enriched_df, ticker, add_benchmarks=True)
 
-    def handle_train(self, ticker: str, start_date: str, end_date: str, indicators: List[str]):
+    def handle_train(self, ticker: str, indicators: List[str], start_date: str = None, end_date: str = None):
+        # Get dates if not provided
+        if start_date is None or end_date is None:
+            start_date, end_date = self.prompt_for_dates({"start_date": start_date, "end_date": end_date})
+            print(f"Using date range: {start_date} to {end_date}")
         # Convert user-friendly indicator names to canonical names using feature_resolver
         canonical_indicators = []
         for indicator in indicators:
@@ -264,7 +297,11 @@ class InteractiveToolCallingAgent:
         acc = ml_agent.train(enriched_df)
         print(f"ML model trained on {ticker} with indicators {canonical_indicators}. Accuracy: {acc:.2f}")
 
-    def handle_analysis(self, ticker: str, start_date: str, end_date: str):
+    def handle_analysis(self, ticker: str, start_date: str = None, end_date: str = None):
+        # Get dates if not provided
+        if start_date is None or end_date is None:
+            start_date, end_date = self.prompt_for_dates({"start_date": start_date, "end_date": end_date})
+            print(f"Using date range: {start_date} to {end_date}")
         fetcher = DataFetchAgent(start=start_date, end=end_date)
         df = fetcher.fetch(ticker)
         fg_df = self.handle_fear_greed(start_date, end_date)
@@ -273,10 +310,18 @@ class InteractiveToolCallingAgent:
         enriched_df = pd.merge(enriched_df, fg_df, on="date", how="left")
         return analysis_results, enriched_df
 
-    def handle_fear_greed(self, start_date: str, end_date: str):
+    def handle_fear_greed(self, start_date: str = None, end_date: str = None):
+        # Get dates if not provided
+        if start_date is None or end_date is None:
+            start_date, end_date = self.prompt_for_dates({"start_date": start_date, "end_date": end_date})
+            print(f"Using date range: {start_date} to {end_date}")
         return get_fear_greed_score(start_date, end_date)
 
-    def handle_summary(self, ticker: str, start_date: str, end_date: str):
+    def handle_summary(self, ticker: str, start_date: str = None, end_date: str = None):
+        # Get dates if not provided
+        if start_date is None or end_date is None:
+            start_date, end_date = self.prompt_for_dates({"start_date": start_date, "end_date": end_date})
+            print(f"Using date range: {start_date} to {end_date}")
         analysis_results, enriched_df = self.handle_analysis(ticker, start_date, end_date)
         
         # Extract features from the user input if available, otherwise use default features

@@ -1,0 +1,12 @@
+Metric,Value
+Accuracy,0.3333333333333333
+Precision,0.0
+Recall,0.0
+Specificity,1.0
+F1 Score,0.0
+Balanced Accuracy,0.5
+True Positives,0.0
+True Negatives,2.0
+False Positives,0.0
+False Negatives,4.0
+Total Predictions,6.0

@@ -1,0 +1,7 @@
+date,llm_prob,recommendation,llm_decision,actual,correct
+2025-04-24,0.45,SELL,0,1,False
+2025-04-25,0.45,SELL,0,0,True
+2025-04-28,0.45,SELL,0,1,False
+2025-04-29,0.45,SELL,0,0,True
+2025-04-30,0.48,SELL,0,1,False
+2025-05-01,0.45,SELL,0,1,False
