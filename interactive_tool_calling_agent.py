@@ -387,7 +387,7 @@ class InteractiveToolCallingAgent:
             "- Consider a stock oversold if 2day-RSI is less than 10\n"
             "- Evaluate moving average crossovers and price vs long-term moving averages\n"
             "- Consider stochastic, Bollinger Bands, and other volatility indicators\n"
-            "- Factor in the Fear & Greed Index for market sentiment not don't give too much weight to final decision making\n\n"
+            "- Factor in the Fear & Greed Index for market sentiment, but don't give too much weight to final decision making\n\n"
             "Summarize the market situation and provide your final recommendation.\n\n"
             "**Important:** At the very end of your summary, you must include ONLY these two lines and NOTHING ELSE after them:\n"
             "**Final Probability (UP):** <your calculated probability between 0 and 1 based on ALL factors, not just the ML model>\n"
